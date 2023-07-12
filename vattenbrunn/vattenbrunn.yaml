@@ -1,0 +1,127 @@
+substitutions:
+  device_name: "vattenbrunn"
+  friendly_name: "Vattenbrunn"
+esphome:
+  name: ${device_name}
+  platform: ESP8266
+  board: d1_mini
+logger:
+api:
+  encryption:
+    key: "*" #replace with real key
+ota:
+  password: "*" #replace with real pass
+#  -----  Wifi setup
+wifi:
+  ssid: # Replace with wifi name
+  password: # Replace with wifi pass
+  fast_connect: false
+  manual_ip: #Replace with real ip
+    static_ip: 0.0.0.0
+    gateway: 0.0.0.0
+    subnet: 0.0.0.0
+    dns1: 0.0.0.0
+#  -----  I2C
+i2c:
+  sda: D2
+  scl: D1
+#
+
+#  -----  Binary Sensors 
+binary_sensor:
+#  -----  Status sensor    -----  #
+  - platform: status
+    name: "${friendly_name} Status"
+#
+
+#  -----  Sensors
+sensor:
+
+#  -----   WIFI Signal  -----  #
+  - platform: wifi_signal # Reports the WiFi signal strength/RSSI in dB
+    name: "${friendly_name} WiFi Signal dB"
+    id: wifi_signal_db
+    update_interval: 30s
+    entity_category: "diagnostic"
+#
+
+#  -----  INA322 1  -----  #
+  - platform: ina3221
+    address: 0x40
+    id: INA3221
+    update_interval: 10s
+# Channel 1
+    channel_1:
+      shunt_resistance: 0.1 ohm
+      current:
+        accuracy_decimals: 3
+        name: "${friendly_name} INA3221 Channel 1 Current"
+        id: channel1_current
+        unit_of_measurement: 'mA'
+        filters:
+        - multiply: 1000
+        - filter_out: nan
+        - median:
+            window_size: 5
+            send_every: 5
+            send_first_at: 1
+      power:
+        accuracy_decimals: 3
+        name: "${friendly_name} INA3221 Channel 1 Power"
+        id: channel1_power
+        filters:
+        - median:
+            window_size: 5
+            send_every: 5
+            send_first_at: 1
+      bus_voltage:
+        accuracy_decimals: 3
+        name: "${friendly_name} INA3221 Channel 1 Bus Voltage"
+        id: channel1_bus_voltage
+        filters:
+        - median:
+            window_size: 5
+            send_every: 5
+            send_first_at: 1
+      shunt_voltage:
+        name: "${friendly_name} INA3221 Channel 1 Shunt Voltage"
+        id: channel1_shunt_voltage
+        accuracy_decimals: 3
+        filters:
+        - median:
+            window_size: 5
+            send_every: 5
+            send_first_at: 1
+# 
+
+#  -----  Water Level % copy sensor  -----  #
+#
+  - platform: copy 
+    source_id: channel1_current
+    id: waterlevel
+    name: "${friendly_name} Water Level Percent"
+    icon: mdi:water-percent
+    filters:
+      - calibrate_linear:
+          - 18.4 -> 100.00 #value from maximum measured water level
+          - 7.60 -> 0.00 #value from minimim measured water level
+      - lambda: if (x < 0) return 0; else if (x > 100) return 100; else return (x);
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+#
+#  -----  Water level liter calculation  -----  #
+# https://www.kalkyleramera.se/geometri/volym-cylinder 
+# 18.4mA = 3.23M = 2054.84
+# 7.6mA = 0
+  - platform: copy 
+    source_id: channel1_current
+    id: waterliters
+    name: "${friendly_name} Water Level"
+    filters:
+      - lambda: if (x < 0) return 0; else return (x);
+      - calibrate_linear:
+          - 18.4 -> 2055
+          - 7.60 -> 0.00
+    device_class: volume_storage
+    unit_of_measurement: "L"
+    accuracy_decimals: 0
